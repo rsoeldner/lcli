@@ -1,0 +1,12 @@
+# Generates generated.go from queries.graphql against Linear's published
+# schema (https://github.com/linear/linear/blob/master/packages/sdk/src/schema.graphql).
+# Regenerate with: go generate ./...
+schema: schema.graphql
+operations:
+  - queries.graphql
+generated: generated.go
+package: linear
+context_type: context.Context
+bindings:
+  DateTime:
+    type: time.Time
