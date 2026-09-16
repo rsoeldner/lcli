@@ -20,6 +20,9 @@ lcli issue ENG-123
   files with local paths.
 - Open the downloaded images with the Read tool: screenshots often carry the
   actual bug report.
+- A file that failed to download still exits 0; it shows an `error:` line
+  under Media (`error` in `--json`). Mention missing screenshots to the user
+  instead of guessing their content.
 - For videos, rerun with `--frames 4` and Read the extracted frame images.
 - `--json` gives the same data structured; `lcli comment list ENG-123` shows
   only comments.
@@ -63,16 +66,24 @@ Editing someone else's comment is expected to fail (Linear normally only lets th
 Run `lcli comment list ENG-123` before retrying a `comment add`. If the
 comment is already there, edit it instead of posting again.
 
-If a command fails after uploading files, stderr lists them under
-"Already uploaded". Put those markdown lines into the body file and retry
-without `--attach`, so nothing gets uploaded twice.
+If `comment add`/`comment edit` fails after uploading files, stderr lists
+them under "Already uploaded". If `lcli upload` fails partway, the snippets
+of the files that did upload are already on stdout. Put those markdown lines
+into the body file and retry without `--attach`, so nothing gets uploaded
+twice.
 
 ## Errors (exit codes)
 
 - **1: input error.** Examples: an unknown team key (the message lists the
-  known keys), a missing file, or a comment that belongs to another issue.
-  Fix the arguments; don't retry unchanged.
+  known keys), a missing file, a comment that belongs to another issue, or a
+  `-m` value that is a flag name (`-m --dry-run`). Fix the arguments; don't
+  retry unchanged.
 - **2: config, key or auth problem.** Tell the user and suggest
   `lcli accounts --check`. Don't try to work around it.
-- **3: Linear API or network error.** Report Linear's message. Retry once at
-  most, and only for reads, or for writes after checking with `comment list`.
+- **3: Linear API or network error.** This includes an issue ID that doesn't
+  exist ("Entity not found"): check the ID instead of retrying. Otherwise
+  report Linear's message and retry once at most, and only for reads, or for
+  writes after checking with `comment list`.
+
+`--dry-run` makes no changes, but it still reads the issue from Linear, so it
+needs a working key and network.

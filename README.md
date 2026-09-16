@@ -14,7 +14,7 @@ the caller never has to choose between accounts.
 
 ## Install
 
-From this repository (Go 1.27+):
+From this repository (Go 1.27.1 or newer):
 
 ```sh
 go install .          # installs lcli into $(go env GOPATH)/bin
@@ -41,7 +41,9 @@ key_env = "LINEAR_ACME_KEY"     # or read the key from an environment variable
 
 Each account sets exactly one of `key_cmd` (a shell command printing the key,
 e.g. macOS Keychain or `op read op://vault/linear-acme/credential`) or
-`key_env`. A team key may belong to only one account.
+`key_env`. A team key may belong to only one account. If `key_cmd` fails,
+the first line of its stderr is included in the error message, so use a
+command that does not print the key to stderr.
 
 Store a key in the macOS Keychain with:
 
@@ -66,7 +68,8 @@ lcli comment edit <ID|URL> <COMMENT_ID> (-m TEXT | --body-file FILE|-) [--append
 lcli upload <ID|URL> <FILE>... [--dry-run]
 ```
 
-All commands accept `--account NAME` to override team-key routing.
+Issue commands accept `--account NAME` to override team-key routing
+(`accounts` ignores it and always lists every account).
 `<ID|URL>` is an identifier such as `ENG-123` or a `https://linear.app/.../issue/ENG-123/...` URL.
 
 ### Reading
@@ -77,7 +80,9 @@ comment ID. Files uploaded to Linear and referenced in the description or
 comments are downloaded with the account's key to
 `<user cache dir>/lcli/<ID>/` (macOS: `~/Library/Caches/lcli/ENG-123/`) or
 `--out`, and listed under **Media** with their local paths. `--frames N`
-additionally extracts N still frames from each video.
+additionally extracts N still frames (at most 20) from each video. A failed
+download or frame extraction does not change the exit code; it is reported as
+an `error:` line under **Media** (`error` in `--json`).
 
 ### Writing
 
@@ -89,7 +94,8 @@ additionally extracts N still frames from each video.
   the end instead. The comment must belong to the given issue.
 - `upload` only prints markdown snippets; the files are not visible on the
   issue until a snippet is embedded with `comment add`/`comment edit`.
-- `--dry-run` shows exactly what would be posted, without uploading or posting.
+- `--dry-run` shows exactly what would be posted, without uploading or posting
+  (it still reads the issue from Linear, so it needs the key and network).
 - If posting fails after files were uploaded, their markdown is printed to
   stderr under "Already uploaded" so they can be reused instead of re-uploaded.
 - `-m` rejects a value that is one of the command's own flags (`-m --dry-run`
@@ -101,9 +107,9 @@ additionally extracts N still frames from each video.
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| 1 | usage or input error (bad ID, unknown team key, missing file, comment on another issue) |
+| 1 | usage or input error (malformed ID, unknown team key, missing file, comment on another issue) |
 | 2 | config, key retrieval or authentication error |
-| 3 | Linear API or network error |
+| 3 | Linear API or network error, including an issue or comment that does not exist |
 
 ## Use from Claude Code
 
