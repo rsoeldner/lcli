@@ -56,6 +56,14 @@ query IssueDetails($id: String!) {
   }
 }
 
+query IssueRef($id: String!) {
+  issue(id: $id) {
+    id
+    identifier
+    url
+  }
+}
+
 query IssueComments(
   $id: String!
   # @genqlient(pointer: true)

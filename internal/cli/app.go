@@ -123,7 +123,7 @@ Exit codes: 0 ok, 1 usage/input, 2 config/auth, 3 Linear API/network.`,
 		SilenceErrors: true,
 	}
 	root.PersistentFlags().String("account", "", "use this configured account instead of resolving it from the team key")
-	root.AddCommand(a.accountsCmd(), a.issueCmd(), a.commentCmd())
+	root.AddCommand(a.accountsCmd(), a.issueCmd(), a.commentCmd(), a.uploadCmd())
 	return root
 }
 

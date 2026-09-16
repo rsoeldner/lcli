@@ -642,6 +642,37 @@ type IssueDetailsResponse struct {
 // GetIssue returns IssueDetailsResponse.Issue, and is useful for accessing the field via an interface.
 func (v *IssueDetailsResponse) GetIssue() IssueDetailsIssue { return v.Issue }
 
+// IssueRefIssue includes the requested fields of the GraphQL type Issue.
+// The GraphQL type's documentation follows.
+//
+// An issue is the core work item in Linear. Issues belong to a team, have a workflow status, can be assigned to users, carry a priority level, and can be organized into projects and cycles. Issues support sub-issues (parent-child hierarchy up to 10 levels deep), labels, due dates, estimates, and SLA tracking. They can also be linked to other issues via relations, attached to releases, and tracked through their full history of changes.
+type IssueRefIssue struct {
+	// The unique identifier of the entity.
+	Id string `json:"id"`
+	// Issue's human readable identifier (e.g. ENG-123).
+	Identifier string `json:"identifier"`
+	// Issue URL.
+	Url string `json:"url"`
+}
+
+// GetId returns IssueRefIssue.Id, and is useful for accessing the field via an interface.
+func (v *IssueRefIssue) GetId() string { return v.Id }
+
+// GetIdentifier returns IssueRefIssue.Identifier, and is useful for accessing the field via an interface.
+func (v *IssueRefIssue) GetIdentifier() string { return v.Identifier }
+
+// GetUrl returns IssueRefIssue.Url, and is useful for accessing the field via an interface.
+func (v *IssueRefIssue) GetUrl() string { return v.Url }
+
+// IssueRefResponse is returned by IssueRef on success.
+type IssueRefResponse struct {
+	// One specific issue, looked up by its unique identifier.
+	Issue IssueRefIssue `json:"issue"`
+}
+
+// GetIssue returns IssueRefResponse.Issue, and is useful for accessing the field via an interface.
+func (v *IssueRefResponse) GetIssue() IssueRefIssue { return v.Issue }
+
 // UpdateCommentCommentUpdateCommentPayload includes the requested fields of the GraphQL type CommentPayload.
 // The GraphQL type's documentation follows.
 //
@@ -826,6 +857,14 @@ type __IssueDetailsInput struct {
 
 // GetId returns __IssueDetailsInput.Id, and is useful for accessing the field via an interface.
 func (v *__IssueDetailsInput) GetId() string { return v.Id }
+
+// __IssueRefInput is used internally by genqlient
+type __IssueRefInput struct {
+	Id string `json:"id"`
+}
+
+// GetId returns __IssueRefInput.Id, and is useful for accessing the field via an interface.
+func (v *__IssueRefInput) GetId() string { return v.Id }
 
 // __UpdateCommentInput is used internally by genqlient
 type __UpdateCommentInput struct {
@@ -1082,6 +1121,42 @@ func IssueDetails(
 	}
 
 	data_ = &IssueDetailsResponse{}
+	resp_ := &graphql.Response{Data: data_}
+
+	err_ = client_.MakeRequest(
+		ctx_,
+		req_,
+		resp_,
+	)
+
+	return data_, err_
+}
+
+// The query executed by IssueRef.
+const IssueRef_Operation = `
+query IssueRef ($id: String!) {
+	issue(id: $id) {
+		id
+		identifier
+		url
+	}
+}
+`
+
+func IssueRef(
+	ctx_ context.Context,
+	client_ graphql.Client,
+	id string,
+) (data_ *IssueRefResponse, err_ error) {
+	req_ := &graphql.Request{
+		OpName: "IssueRef",
+		Query:  IssueRef_Operation,
+		Variables: &__IssueRefInput{
+			Id: id,
+		},
+	}
+
+	data_ = &IssueRefResponse{}
 	resp_ := &graphql.Response{Data: data_}
 
 	err_ = client_.MakeRequest(

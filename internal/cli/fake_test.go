@@ -63,7 +63,7 @@ func newFakeLinear(t *testing.T) *fakeLinear {
 	mux.HandleFunc("/graphql", f.serveGraphQL)
 	mux.HandleFunc("/files/", f.serveFile)
 	mux.HandleFunc("/upload/", f.serveUpload)
-	f.srv = httptest.NewServer(mux)
+	f.srv = httptest.NewTLSServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
 }
@@ -181,6 +181,7 @@ func newTestApp(t *testing.T, f *fakeLinear) *App {
 	}
 	if f != nil {
 		app.Endpoint = f.srv.URL + "/graphql"
+		app.HTTP = f.srv.Client()
 		app.UploadHosts = []string{f.host()}
 	}
 	return app
