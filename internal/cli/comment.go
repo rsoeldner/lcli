@@ -65,12 +65,15 @@ func (w *writeFlags) register(cmd *cobra.Command) {
 }
 
 // body returns the text given via -m or --body-file and whether either was set.
-func (w *writeFlags) body(cmd *cobra.Command) (string, bool, error) {
+func (w *writeFlags) body(cmd *cobra.Command, rawArgs []string) (string, bool, error) {
 	hasMsg, hasFile := cmd.Flags().Changed("message"), cmd.Flags().Changed("body-file")
 	switch {
 	case hasMsg && hasFile:
 		return "", false, usageErr("use either -m or --body-file, not both")
 	case hasMsg:
+		if looksLikeFlag(cmd, rawArgs, w.message) {
+			return "", false, usageErr("-m value %q is one of this command's flags; the text is probably missing (use -m=TEXT to post it literally)", w.message)
+		}
 		return w.message, true, nil
 	case hasFile && w.bodyFile == "-":
 		b, err := io.ReadAll(cmd.InOrStdin())
@@ -86,6 +89,26 @@ func (w *writeFlags) body(cmd *cobra.Command) (string, bool, error) {
 		return string(b), true, nil
 	}
 	return "", false, nil
+}
+
+// looksLikeFlag reports whether v names a flag of cmd, e.g. "--dry-run" in
+// "-m --dry-run", where pflag would take the flag as the message text.
+// A value given as -m=--dry-run is taken literally.
+func looksLikeFlag(cmd *cobra.Command, rawArgs []string, v string) bool {
+	for _, arg := range rawArgs {
+		if strings.HasPrefix(arg, "-m=") || strings.HasPrefix(arg, "--message=") {
+			return false
+		}
+	}
+	name, ok := strings.CutPrefix(v, "--")
+	if ok {
+		name, _, _ = strings.Cut(name, "=")
+		return cmd.Flags().Lookup(name) != nil
+	}
+	if short, ok := strings.CutPrefix(v, "-"); ok && len(short) == 1 {
+		return cmd.Flags().ShorthandLookup(short) != nil
+	}
+	return false
 }
 
 func statFiles(paths []string) ([]upload.File, error) {
@@ -107,7 +130,7 @@ func (a *App) uploadFiles(ctx context.Context, s *session, files []upload.File, 
 	u := &upload.Uploader{Client: s.client, HTTP: a.HTTP}
 	snippets := make([]string, 0, len(files))
 	for _, f := range files {
-		assetURL := "<asset URL after upload>"
+		assetURL := "ASSET_URL_AFTER_UPLOAD"
 		if !dryRun {
 			var err error
 			if assetURL, err = u.Upload(ctx, f); err != nil {
@@ -145,7 +168,7 @@ func commentOnIssue(ctx context.Context, s *session, commentID string, issue *li
 		return nil, apiErr(s.account.Name, err)
 	}
 	c := &resp.Comment
-	if c.Issue == nil || !strings.EqualFold(c.Issue.Identifier, issue.Identifier) {
+	if c.Issue == nil || c.Issue.Id != issue.Id {
 		where := "no issue"
 		if c.Issue != nil {
 			where = c.Issue.Identifier
@@ -153,6 +176,18 @@ func commentOnIssue(ctx context.Context, s *session, commentID string, issue *li
 		return nil, usageErr("comment %s belongs to %s, not %s", commentID, where, issue.Identifier)
 	}
 	return c, nil
+}
+
+// reportUploaded lists files that were uploaded before a later step failed,
+// so they can be embedded with 'comment edit' instead of uploaded again.
+func reportUploaded(w io.Writer, snippets []string) {
+	if len(snippets) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "Already uploaded (embed these instead of uploading again):")
+	for _, s := range snippets {
+		fmt.Fprintln(w, s)
+	}
 }
 
 func printDryRun(w io.Writer, action string, files []upload.File, body string) {
@@ -179,7 +214,7 @@ ID and URL; use 'lcli comment edit' to fix a comment instead of posting again.`,
   lcli comment add ENG-123 -m "Deployed to staging." --reply-to 0f5c...`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body, _, err := w.body(cmd)
+			body, _, err := w.body(cmd, a.args)
 			if err != nil {
 				return err
 			}
@@ -208,6 +243,7 @@ ID and URL; use 'lcli comment edit' to fix a comment instead of posting again.`,
 			}
 			snippets, err := a.uploadFiles(ctx, s, files, w.dryRun)
 			if err != nil {
+				reportUploaded(cmd.ErrOrStderr(), snippets)
 				return err
 			}
 			full := joinBody(body, snippets)
@@ -221,11 +257,12 @@ ID and URL; use 'lcli comment edit' to fix a comment instead of posting again.`,
 				return nil
 			}
 			resp, err := linear.CreateComment(ctx, s.client, issue.Id, full, parentID)
-			if err != nil {
-				return apiErr(s.account.Name, err)
+			if err == nil && !resp.CommentCreate.Success {
+				err = fmt.Errorf("commentCreate reported no success")
 			}
-			if !resp.CommentCreate.Success {
-				return apiErr(s.account.Name, fmt.Errorf("commentCreate reported no success"))
+			if err != nil {
+				reportUploaded(cmd.ErrOrStderr(), snippets)
+				return apiErr(s.account.Name, err)
 			}
 			c := resp.CommentCreate.Comment
 			fmt.Fprintf(out, "Created comment %s on %s\nURL: %s\n", c.Id, issue.Identifier, c.Url)
@@ -254,7 +291,7 @@ resulting body.`,
   lcli comment edit ENG-123 0f5c... --append -m "Update: fixed in v1.2" --attach after.png`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body, hasBody, err := w.body(cmd)
+			body, hasBody, err := w.body(cmd, a.args)
 			if err != nil {
 				return err
 			}
@@ -286,6 +323,7 @@ resulting body.`,
 			}
 			snippets, err := a.uploadFiles(ctx, s, files, w.dryRun)
 			if err != nil {
+				reportUploaded(cmd.ErrOrStderr(), snippets)
 				return err
 			}
 			addition := joinBody(body, snippets)
@@ -299,11 +337,12 @@ resulting body.`,
 				return nil
 			}
 			resp, err := linear.UpdateComment(ctx, s.client, existing.Id, full)
-			if err != nil {
-				return apiErr(s.account.Name, err)
+			if err == nil && !resp.CommentUpdate.Success {
+				err = fmt.Errorf("commentUpdate reported no success")
 			}
-			if !resp.CommentUpdate.Success {
-				return apiErr(s.account.Name, fmt.Errorf("commentUpdate reported no success"))
+			if err != nil {
+				reportUploaded(cmd.ErrOrStderr(), snippets)
+				return apiErr(s.account.Name, err)
 			}
 			c := resp.CommentUpdate.Comment
 			fmt.Fprintf(out, "Updated comment %s on %s\nURL: %s\n", c.Id, issue.Identifier, c.Url)

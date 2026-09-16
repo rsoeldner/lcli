@@ -24,6 +24,7 @@ func TestStat(t *testing.T) {
 		{"a.png", []byte("x"), "image/png"},
 		{"a.JPG", []byte("x"), "image/jpeg"},
 		{"clip.mp4", []byte("x"), "video/mp4"},
+		{"screen.MOV", []byte("x"), "video/quicktime"},
 		{"notes.txt", []byte("hello"), "text/plain"},
 		{"noext", []byte("\x89PNG\r\n\x1a\n0000"), "image/png"},
 		{"empty-noext", nil, "text/plain"},
@@ -47,5 +48,8 @@ func TestSnippet(t *testing.T) {
 	}
 	if got := Snippet(File{Name: "repro.mov", ContentType: "video/quicktime"}, "https://u/2"); got != "[repro.mov](https://u/2)" {
 		t.Errorf("video snippet = %s", got)
+	}
+	if got := Snippet(File{Name: "a\nb.png", ContentType: "image/png"}, "https://u/x y(1)<2>"); got != "![a b.png](https://u/x%20y%281%29%3C2%3E)" {
+		t.Errorf("escaped snippet = %s", got)
 	}
 }

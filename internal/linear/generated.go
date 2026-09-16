@@ -37,9 +37,14 @@ func (v *CommentByIDComment) GetIssue() *CommentByIDCommentIssue { return v.Issu
 //
 // An issue is the core work item in Linear. Issues belong to a team, have a workflow status, can be assigned to users, carry a priority level, and can be organized into projects and cycles. Issues support sub-issues (parent-child hierarchy up to 10 levels deep), labels, due dates, estimates, and SLA tracking. They can also be linked to other issues via relations, attached to releases, and tracked through their full history of changes.
 type CommentByIDCommentIssue struct {
+	// The unique identifier of the entity.
+	Id string `json:"id"`
 	// Issue's human readable identifier (e.g. ENG-123).
 	Identifier string `json:"identifier"`
 }
+
+// GetId returns CommentByIDCommentIssue.Id, and is useful for accessing the field via an interface.
+func (v *CommentByIDCommentIssue) GetId() string { return v.Id }
 
 // GetIdentifier returns CommentByIDCommentIssue.Identifier, and is useful for accessing the field via an interface.
 func (v *CommentByIDCommentIssue) GetIdentifier() string { return v.Identifier }
@@ -885,6 +890,7 @@ query CommentByID ($id: String!) {
 		id
 		body
 		issue {
+			id
 			identifier
 		}
 	}

@@ -15,7 +15,8 @@ func (a *App) uploadCmd() *cobra.Command {
 snippet per file. The issue ID selects the account and is checked to exist.
 Uploaded files are NOT visible on the issue until a snippet is embedded in a
 comment ('lcli comment add' / 'lcli comment edit'). Use this only when a file
-must appear in the middle of the comment text; otherwise use --attach.`,
+must appear in the middle of the comment text; otherwise use --attach.
+Put -- before file names that start with '-'.`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			files, err := statFiles(args[1:])

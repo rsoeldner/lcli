@@ -63,6 +63,10 @@ Editing someone else's comment is expected to fail (Linear normally only lets th
 Run `lcli comment list ENG-123` before retrying a `comment add`. If the
 comment is already there, edit it instead of posting again.
 
+If a command fails after uploading files, stderr lists them under
+"Already uploaded". Put those markdown lines into the body file and retry
+without `--attach`, so nothing gets uploaded twice.
+
 ## Errors (exit codes)
 
 - **1: input error.** Examples: an unknown team key (the message lists the

@@ -42,6 +42,8 @@ type App struct {
 	UploadHosts []string
 	// CacheDir is where issue media is downloaded by default.
 	CacheDir string
+
+	args []string // raw arguments of the current Run
 }
 
 // New returns an App wired to the real process environment.
@@ -86,6 +88,7 @@ func apiErr(account string, err error) error {
 
 // Run executes lcli with args and returns the process exit code.
 func (a *App) Run(ctx context.Context, args []string) int {
+	a.args = args
 	root := a.rootCmd()
 	root.SetArgs(args)
 	root.SetIn(a.Stdin)

@@ -109,6 +109,7 @@ query CommentByID($id: String!) {
     body
     # @genqlient(pointer: true)
     issue {
+      id
       identifier
     }
   }

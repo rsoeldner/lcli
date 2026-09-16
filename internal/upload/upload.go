@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Khan/genqlient/graphql"
 
@@ -40,7 +41,10 @@ func Stat(path string) (File, error) {
 	if st.Size() > math.MaxInt32 {
 		return File{}, fmt.Errorf("%s is too large (%d bytes)", path, st.Size())
 	}
-	ctype := mime.TypeByExtension(filepath.Ext(path))
+	ctype := commonTypes[strings.ToLower(filepath.Ext(path))]
+	if ctype == "" {
+		ctype = mime.TypeByExtension(filepath.Ext(path))
+	}
 	if ctype == "" {
 		ctype, err = sniff(path)
 		if err != nil {
@@ -51,6 +55,21 @@ func Stat(path string) (File, error) {
 		ctype = mt
 	}
 	return File{Path: path, Name: filepath.Base(path), ContentType: ctype, Size: st.Size()}, nil
+}
+
+// commonTypes pins the types of typical screenshots and recordings so they do
+// not depend on the machine's mime.types files.
+var commonTypes = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".heic": "image/heic",
+	".mp4":  "video/mp4",
+	".m4v":  "video/x-m4v",
+	".mov":  "video/quicktime",
+	".webm": "video/webm",
 }
 
 func sniff(path string) (string, error) {
@@ -68,9 +87,10 @@ func sniff(path string) (string, error) {
 }
 
 // Snippet is the markdown embedding an uploaded file: an inline image for
-// images, a link otherwise (Linear renders uploaded video links as players).
+// images, a link otherwise.
 func Snippet(f File, assetURL string) string {
-	name := strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`).Replace(f.Name)
+	name := strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`, "\n", " ", "\r", " ").Replace(f.Name)
+	assetURL = strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29", "<", "%3C", ">", "%3E").Replace(assetURL)
 	if strings.HasPrefix(f.ContentType, "image/") {
 		return fmt.Sprintf("![%s](%s)", name, assetURL)
 	}
@@ -111,7 +131,10 @@ func (u *Uploader) Upload(ctx context.Context, f File) (string, error) {
 	for _, h := range target.Headers {
 		req.Header.Set(h.Key, h.Value)
 	}
-	put, err := u.HTTP.Do(req)
+	// Large recordings may take longer than the API client's overall timeout.
+	client := *u.HTTP
+	client.Timeout = max(client.Timeout, time.Hour)
+	put, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("upload %s: %w", f.Name, err)
 	}

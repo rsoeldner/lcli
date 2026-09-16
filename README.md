@@ -90,6 +90,10 @@ additionally extracts N still frames from each video.
 - `upload` only prints markdown snippets; the files are not visible on the
   issue until a snippet is embedded with `comment add`/`comment edit`.
 - `--dry-run` shows exactly what would be posted, without uploading or posting.
+- If posting fails after files were uploaded, their markdown is printed to
+  stderr under "Already uploaded" so they can be reused instead of re-uploaded.
+- `-m` rejects a value that is one of the command's own flags (`-m --dry-run`
+  is almost always a missing message); use `-m=--dry-run` to post it literally.
 - There is intentionally no delete command.
 
 ### Exit codes
