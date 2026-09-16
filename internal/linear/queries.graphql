@@ -134,6 +134,7 @@ mutation UpdateComment($id: String!, $body: String!) {
 mutation FileUpload($contentType: String!, $filename: String!, $size: Int!) {
   fileUpload(contentType: $contentType, filename: $filename, size: $size) {
     success
+    # @genqlient(pointer: true)
     uploadFile {
       uploadUrl
       assetUrl

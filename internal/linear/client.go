@@ -67,7 +67,17 @@ func Message(err error) string {
 	if errors.As(err, &list) {
 		return messages(list)
 	}
-	return err.Error()
+	return truncate(err.Error())
+}
+
+// truncate bounds messages that may embed a whole non-JSON response body,
+// such as a proxy's HTML error page.
+func truncate(s string) string {
+	const limit = 500
+	if len(s) <= limit {
+		return s
+	}
+	return s[:limit] + "… (truncated)"
 }
 
 func messages(list gqlerror.List) string {
@@ -77,7 +87,7 @@ func messages(list gqlerror.List) string {
 		if upm, ok := e.Extensions["userPresentableMessage"].(string); ok && upm != "" && upm != msg {
 			msg += " (" + upm + ")"
 		}
-		msgs = append(msgs, msg)
+		msgs = append(msgs, truncate(msg))
 	}
 	return strings.Join(msgs, "; ")
 }

@@ -66,6 +66,8 @@ func TestLoadValidation(t *testing.T) {
 		"dup team":     {"[accounts.a]\nteams=['A']\nkey_env='X'\n[accounts.b]\nteams=['a']\nkey_env='Y'\n", "team key A is listed in both"},
 		"unknown key":  {"[accounts.a]\nkey_env='X'\napi_key='oops'\n", "unknown keys"},
 		"invalid toml": {"[accounts.a\n", "parse"},
+		"empty team":   {"[accounts.a]\nteams=[' ']\nkey_env='X'\n", "empty team key"},
+		"team twice":   {"[accounts.a]\nteams=['A','a']\nkey_env='X'\n", `account "a" lists team key A twice`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Load(write(t, tc.content))
@@ -94,13 +96,14 @@ func TestAPIKey(t *testing.T) {
 		t.Errorf("key_env key = %q, %v", key, err)
 	}
 
-	t.Setenv("LCLI_CFG_TEST_KEY", "")
+	t.Setenv("LCLI_CFG_TEST_KEY", "  \n")
 	if _, err := c.Accounts["eng"].APIKey(ctx); err == nil || !strings.Contains(err.Error(), "LCLI_CFG_TEST_KEY is empty") {
 		t.Errorf("empty env error = %v", err)
 	}
 
-	failing := &Account{Name: "x", KeyCmd: "echo nope >&2; exit 3"}
-	if _, err := failing.APIKey(ctx); err == nil || !strings.Contains(err.Error(), "key_cmd failed") || !strings.Contains(err.Error(), "nope") {
+	failing := &Account{Name: "x", KeyCmd: "echo nope >&2; echo second-line-secret >&2; exit 3"}
+	if _, err := failing.APIKey(ctx); err == nil || !strings.Contains(err.Error(), "key_cmd failed") ||
+		!strings.Contains(err.Error(), "nope") || strings.Contains(err.Error(), "second-line-secret") {
 		t.Errorf("failing key_cmd error = %v", err)
 	}
 	empty := &Account{Name: "x", KeyCmd: "true"}

@@ -24,6 +24,7 @@ func (a *App) accountsCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Config: %s\n", c.Path)
 			var failed []string
+			code := ExitOK
 			for _, name := range c.Names() {
 				acct := c.Accounts[name]
 				teams := strings.Join(acct.Teams, ", ")
@@ -37,10 +38,11 @@ func (a *App) accountsCmd() *cobra.Command {
 				if err := a.checkAccount(cmd, acct); err != nil {
 					fmt.Fprintf(out, "  check: FAILED: %v\n", err)
 					failed = append(failed, name)
+					code = max(code, exitCode(err))
 				}
 			}
 			if len(failed) > 0 {
-				return configErr(fmt.Errorf("check failed for account(s): %s", strings.Join(failed, ", ")))
+				return &exitError{code, fmt.Errorf("check failed for account(s): %s", strings.Join(failed, ", "))}
 			}
 			return nil
 		},

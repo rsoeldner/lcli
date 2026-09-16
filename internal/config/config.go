@@ -80,7 +80,13 @@ func Load(path string) (*Config, error) {
 		for i, t := range a.Teams {
 			t = strings.ToUpper(strings.TrimSpace(t))
 			a.Teams[i] = t
+			if t == "" {
+				return nil, fmt.Errorf("%s: account %q has an empty team key", path, name)
+			}
 			if prev, ok := owner[t]; ok {
+				if prev == name {
+					return nil, fmt.Errorf("%s: account %q lists team key %s twice", path, name, t)
+				}
 				return nil, fmt.Errorf("%s: team key %s is listed in both accounts %q and %q", path, t, prev, name)
 			}
 			owner[t] = name
@@ -147,24 +153,32 @@ func (a *Account) KeySource() string {
 
 // APIKey retrieves the account's API key.
 func (a *Account) APIKey(ctx context.Context) (string, error) {
-	var key string
 	if a.KeyEnv != "" {
-		key = os.Getenv(a.KeyEnv)
+		key := strings.TrimSpace(os.Getenv(a.KeyEnv))
 		if key == "" {
 			return "", fmt.Errorf("account %q: environment variable %s is empty", a.Name, a.KeyEnv)
 		}
-	} else {
-		var stdout, stderr bytes.Buffer
-		cmd := exec.CommandContext(ctx, "/bin/sh", "-c", a.KeyCmd)
-		cmd.Stdout, cmd.Stderr = &stdout, &stderr
-		if err := cmd.Run(); err != nil {
-			return "", fmt.Errorf("account %q: key_cmd failed: %v: %s", a.Name, err, strings.TrimSpace(stderr.String()))
-		}
-		key = stdout.String()
+		return key, nil
 	}
-	key = strings.TrimSpace(key)
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", a.KeyCmd)
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		// Only the first stderr line: enough to diagnose, without echoing
+		// whatever else a password manager may print.
+		first, _, _ := strings.Cut(strings.TrimSpace(stderr.String()), "\n")
+		return "", fmt.Errorf("account %q: key_cmd failed: %v: %s", a.Name, err, truncate(first, 200))
+	}
+	key := strings.TrimSpace(stdout.String())
 	if key == "" {
 		return "", fmt.Errorf("account %q: key_cmd printed an empty key", a.Name)
 	}
 	return key, nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }

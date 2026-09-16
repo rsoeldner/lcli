@@ -193,14 +193,14 @@ type FileUploadFileUploadUploadPayload struct {
 	// Whether the operation was successful.
 	Success bool `json:"success"`
 	// The upload file details including signed URL, asset URL, and required headers. Null if the upload could not be prepared.
-	UploadFile FileUploadFileUploadUploadPayloadUploadFile `json:"uploadFile"`
+	UploadFile *FileUploadFileUploadUploadPayloadUploadFile `json:"uploadFile"`
 }
 
 // GetSuccess returns FileUploadFileUploadUploadPayload.Success, and is useful for accessing the field via an interface.
 func (v *FileUploadFileUploadUploadPayload) GetSuccess() bool { return v.Success }
 
 // GetUploadFile returns FileUploadFileUploadUploadPayload.UploadFile, and is useful for accessing the field via an interface.
-func (v *FileUploadFileUploadUploadPayload) GetUploadFile() FileUploadFileUploadUploadPayloadUploadFile {
+func (v *FileUploadFileUploadUploadPayload) GetUploadFile() *FileUploadFileUploadUploadPayloadUploadFile {
 	return v.UploadFile
 }
 

@@ -96,11 +96,16 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return ExitOK
 	}
 	fmt.Fprintln(a.Stderr, "error:", err)
+	return exitCode(err)
+}
+
+// exitCode maps err to an exit code. Errors without an exitError are the
+// ones cobra produces itself: unknown commands, flags and arg counts.
+func exitCode(err error) int {
 	var ee *exitError
 	if errors.As(err, &ee) {
 		return ee.code
 	}
-	// Errors cobra produces itself: unknown commands, flags and arg counts.
 	return ExitUsage
 }
 

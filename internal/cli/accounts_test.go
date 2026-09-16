@@ -72,3 +72,30 @@ func TestUnknownCommandExitsUsage(t *testing.T) {
 	r := run(t, newTestApp(t, nil), "frobnicate")
 	wantCode(t, r, ExitUsage)
 }
+
+func TestAccountsCheckAPIFailureExitsAPI(t *testing.T) {
+	f := newFakeLinear(t)
+	f.on("Viewer", func(map[string]any) gqlResult {
+		return gqlResult{Status: http.StatusInternalServerError, Errors: []map[string]any{{"message": "boom"}}}
+	})
+	r := run(t, newTestApp(t, f), "accounts", "--check")
+	wantCode(t, r, ExitAPI)
+	wantContains(t, r.Stdout, "check: FAILED: linear (account acme): boom")
+
+	app := newTestApp(t, nil)
+	app.Endpoint = "http://127.0.0.1:1/graphql"
+	r = run(t, app, "accounts", "--check")
+	wantCode(t, r, ExitAPI)
+}
+
+func TestAccountsCheckMixedFailuresKeepsMostSevere(t *testing.T) {
+	f := newFakeLinear(t)
+	f.on("Viewer", func(map[string]any) gqlResult {
+		return gqlResult{Status: http.StatusInternalServerError, Errors: []map[string]any{{"message": "boom"}}}
+	})
+	app := newTestApp(t, f)
+	t.Setenv("LCLI_TEST_ENG_KEY", "") // eng fails with a config error, acme with an API error
+	r := run(t, app, "accounts", "--check")
+	wantCode(t, r, ExitAPI)
+	wantContains(t, r.Stdout, "LCLI_TEST_ENG_KEY is empty")
+}
