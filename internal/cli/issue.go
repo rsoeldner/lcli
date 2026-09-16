@@ -65,6 +65,8 @@ type mediaView struct {
 	Error       string   `json:"error,omitempty"`
 }
 
+const maxFrames = 20
+
 func (a *App) issueCmd() *cobra.Command {
 	var (
 		noDownload bool
@@ -86,8 +88,8 @@ downloaded (with the account's API key) into --out, default
   lcli issue ENG-123 --json --no-download`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if frames < 0 {
-				return usageErr("--frames must be >= 0")
+			if frames < 0 || frames > maxFrames {
+				return usageErr("--frames must be between 0 and %d", maxFrames)
 			}
 			if noDownload && (frames > 0 || outDir != "") {
 				return usageErr("--no-download cannot be combined with --frames or --out")
@@ -176,10 +178,13 @@ func fetchComments(ctx context.Context, s *session, issueID string) ([]commentVi
 		for _, c := range conn.Nodes {
 			comments = append(comments, newCommentView(c.CommentFields))
 		}
-		if !conn.PageInfo.HasNextPage || conn.PageInfo.EndCursor == "" {
+		if !conn.PageInfo.HasNextPage {
 			break
 		}
 		cursor := conn.PageInfo.EndCursor
+		if cursor == "" || (after != nil && *after == cursor) {
+			return nil, apiErr(s.account.Name, fmt.Errorf("comment pagination did not advance (cursor %q)", cursor))
+		}
 		after = &cursor
 	}
 	sort.SliceStable(comments, func(i, j int) bool { return comments[i].CreatedAt.Before(comments[j].CreatedAt) })

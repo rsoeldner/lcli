@@ -19,20 +19,26 @@ import (
 	"strings"
 )
 
-var urlRe = regexp.MustCompile(`https?://[^\s()<>\[\]"'` + "`" + `]+`)
+// Only https URLs are considered: the API key must never travel in clear text.
+var urlRe = regexp.MustCompile(`(?i)https://[^\s()<>\[\]"'` + "`" + `]+`)
 
-// Extract returns the distinct URLs in markdown whose host is one of hosts,
-// in order of first appearance.
+// Extract returns the distinct https URLs in markdown whose host is one of
+// hosts, in order of first appearance.
 func Extract(markdown string, hosts []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, raw := range urlRe.FindAllString(markdown, -1) {
-		raw = strings.TrimRight(raw, ".,;:!?")
+		// Strip sentence punctuation and markdown emphasis glued to the URL.
+		raw = strings.TrimRight(raw, ".,;:!?*_~")
 		u, err := url.Parse(raw)
-		if err != nil || !hostAllowed(u.Host, hosts) || seen[raw] {
+		if err != nil || !hostAllowed(u.Host, hosts) {
 			continue
 		}
-		seen[raw] = true
+		key := strings.ToLower(u.Host) + u.RequestURI()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		out = append(out, raw)
 	}
 	return out
@@ -47,11 +53,18 @@ func hostAllowed(host string, hosts []string) bool {
 	return false
 }
 
-// Downloader fetches uploaded files. The API key is sent only to Hosts.
+// Downloader fetches uploaded files. The API key is sent only over https to
+// Hosts, including across redirects.
 type Downloader struct {
 	HTTP   *http.Client
 	APIKey string
 	Hosts  []string
+
+	names map[string]string // file name -> URL it was written for
+}
+
+func (d *Downloader) mayAuthenticate(u *url.URL) bool {
+	return strings.EqualFold(u.Scheme, "https") && hostAllowed(u.Host, d.Hosts)
 }
 
 // File is a downloaded file.
@@ -68,15 +81,27 @@ func (d *Downloader) Download(ctx context.Context, rawURL, dir string) (File, er
 	if err != nil {
 		return File{}, err
 	}
-	if !hostAllowed(u.Host, d.Hosts) {
-		return File{}, fmt.Errorf("refusing to send credentials to %s", u.Host)
+	if !d.mayAuthenticate(u) {
+		return File{}, fmt.Errorf("refusing to send credentials to %s://%s", u.Scheme, u.Host)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return File{}, err
 	}
 	req.Header.Set("Authorization", d.APIKey)
-	resp, err := d.HTTP.Do(req)
+	client := *d.HTTP
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		// net/http keeps the header for same-hostname redirects on other
+		// ports or subdomains; only allowed https hosts may see the key.
+		if !d.mayAuthenticate(next.URL) {
+			next.Header.Del("Authorization")
+		}
+		return nil
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return File{}, err
 	}
@@ -88,7 +113,7 @@ func (d *Downloader) Download(ctx context.Context, rawURL, dir string) (File, er
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return File{}, err
 	}
-	name := fileName(u, ctype)
+	name := d.uniqueName(fileName(u, ctype), rawURL)
 	dest := filepath.Join(dir, name)
 	tmp, err := os.CreateTemp(dir, "."+name+".*")
 	if err != nil {
@@ -106,6 +131,23 @@ func (d *Downloader) Download(ctx context.Context, rawURL, dir string) (File, er
 		return File{}, fmt.Errorf("download %s: %w", rawURL, err)
 	}
 	return File{Path: dest, ContentType: ctype}, nil
+}
+
+// uniqueName prefixes name with a counter when another URL in this run was
+// already saved under it.
+func (d *Downloader) uniqueName(name, rawURL string) string {
+	if d.names == nil {
+		d.names = map[string]string{}
+	}
+	candidate := name
+	for i := 2; ; i++ {
+		prev, used := d.names[candidate]
+		if !used || prev == rawURL {
+			d.names[candidate] = rawURL
+			return candidate
+		}
+		candidate = fmt.Sprintf("%d-%s", i, name)
+	}
 }
 
 func fileName(u *url.URL, contentType string) string {

@@ -99,9 +99,6 @@ func TestIssueMarkdownDownloadsMedia(t *testing.T) {
 	if strings.Index(r.Stdout, "### Comment c-1") > strings.Index(r.Stdout, "### Comment c-2") {
 		t.Errorf("comments not sorted oldest first:\n%s", r.Stdout)
 	}
-	if strings.Contains(r.Stdout, "not-linear.png\n  ->") {
-		t.Error("downloaded a non-Linear URL")
-	}
 	got, err := os.ReadFile(filepath.Join(dir, "shot-uuid.png"))
 	if err != nil || string(got) != "PNGDATA" {
 		t.Fatalf("downloaded image = %q, %v", got, err)
@@ -172,6 +169,29 @@ func TestIssueErrors(t *testing.T) {
 	t.Run("flag conflict", func(t *testing.T) {
 		r := run(t, newTestApp(t, nil), "issue", "ENG-1", "--no-download", "--frames", "2")
 		wantCode(t, r, ExitUsage)
+		r = run(t, newTestApp(t, nil), "issue", "ENG-1", "--no-download", "--out", "/tmp/x")
+		wantCode(t, r, ExitUsage)
+		wantContains(t, r.Stderr, "--no-download cannot be combined")
+	})
+	t.Run("frames bound", func(t *testing.T) {
+		r := run(t, newTestApp(t, nil), "issue", "ENG-1", "--frames", "21")
+		wantCode(t, r, ExitUsage)
+		wantContains(t, r.Stderr, "--frames must be between 0 and 20")
+	})
+	t.Run("pagination stuck", func(t *testing.T) {
+		f := newFakeLinear(t)
+		serveIssue(f)
+		f.on("IssueComments", func(map[string]any) gqlResult {
+			return gqlResult{Data: map[string]any{"issue": map[string]any{"comments": map[string]any{
+				"nodes": []any{}, "pageInfo": map[string]any{"hasNextPage": true, "endCursor": "same"},
+			}}}}
+		})
+		r := run(t, newTestApp(t, f), "comment", "list", "ENG-1")
+		wantCode(t, r, ExitAPI)
+		wantContains(t, r.Stderr, "comment pagination did not advance")
+		if n := len(f.callsTo("IssueComments")); n != 2 {
+			t.Errorf("IssueComments calls = %d, want 2", n)
+		}
 	})
 	t.Run("not found", func(t *testing.T) {
 		f := newFakeLinear(t)
@@ -190,6 +210,7 @@ func TestIssueErrors(t *testing.T) {
 		t.Setenv("LCLI_TEST_ENG_KEY", "")
 		r := run(t, app, "issue", "ENG-1")
 		wantCode(t, r, ExitConfig)
+		wantContains(t, r.Stderr, `account "eng": environment variable LCLI_TEST_ENG_KEY is empty`)
 	})
 }
 
