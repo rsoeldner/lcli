@@ -56,7 +56,7 @@ lcli comment edit ENG-123 <COMMENT_ID> --append -m "Update: verified on staging.
 ```
 
 Find the comment ID in the `comment add` output or with `lcli comment list ENG-123`.
-Only the comment's author (the API key's user) can edit it. There is no delete.
+Editing someone else's comment is expected to fail (Linear normally only lets the author edit); report that to the user. There is no delete.
 
 ## When a command was interrupted or its outcome is unclear
 
