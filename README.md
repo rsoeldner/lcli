@@ -1,127 +1,35 @@
 # lcli
 
 A small CLI for reading and commenting on Linear issues across several Linear
-accounts (workspaces), designed to be easy for LLM agents to drive.
-
-- `lcli issue ENG-123` shows the issue, all comments (with IDs) and attachments,
-  and downloads uploaded images/videos to local files.
-- `lcli comment add ENG-123 --body-file note.md --attach shot.png` posts a comment
-  with uploaded files.
-- `lcli comment edit ENG-123 <COMMENT_ID> ...` fixes a comment instead of posting again.
-
-The account is picked from the issue's team key (`ENG-123` → team `ENG`), so
-the caller never has to choose between accounts.
+accounts, built to be easy for LLM agents to use. The account is picked from
+the issue's team key (`ENG-123` → team `ENG`).
 
 ## Install
 
-From this repository (Go 1.27.1 or newer):
-
 ```sh
-go install .          # installs lcli into $(go env GOPATH)/bin
+go install github.com/rsoeldner/lcli@latest
 ```
-
-`ffmpeg` is optional; it is only needed for `lcli issue --frames`.
 
 ## Configure
 
-Create a personal API key per workspace in Linear (Settings → Account →
-Security & access → Personal API keys), store it outside the config file,
-and describe the accounts in `~/.config/lcli/config.toml`
-(or `$XDG_CONFIG_HOME/lcli/config.toml`, or the path in `$LCLI_CONFIG`):
+`~/.config/lcli/config.toml` (one personal API key per workspace, e.g. in the macOS Keychain):
 
 ```toml
-[accounts.eng]
-teams = ["ENG", "OPS"]          # team keys whose issues live in this workspace
-key_cmd = "security find-generic-password -s lcli-eng -w"
-
-[accounts.acme]
-teams = ["ACME"]
-key_env = "LINEAR_ACME_KEY"     # or read the key from an environment variable
+[accounts.work]
+teams = ["ENG"]
+key_cmd = "security find-generic-password -s lcli-work -w"   # or: key_env = "LINEAR_WORK_KEY"
 ```
 
-Each account sets exactly one of `key_cmd` (a shell command printing the key,
-e.g. macOS Keychain or `op read op://vault/linear-acme/credential`) or
-`key_env`. A team key may belong to only one account. If `key_cmd` fails,
-the first line of its stderr is included in the error message, so use a
-command that does not print the key to stderr.
-
-Store a key in the macOS Keychain with:
-
-```sh
-security add-generic-password -s lcli-eng -a "$USER" -w   # prompts for the key
-```
-
-Verify the setup (lists workspace teams missing from the config, never prints keys):
-
-```sh
-lcli accounts --check
-```
+Check with `lcli accounts --check`.
 
 ## Usage
 
-```
-lcli accounts [--check]
-lcli issue <ID|URL> [--json] [--no-download] [--out DIR] [--frames N]
-lcli comment list <ID|URL> [--json]
-lcli comment add  <ID|URL> (-m TEXT | --body-file FILE|-) [--attach FILE]... [--reply-to COMMENT_ID] [--dry-run]
-lcli comment edit <ID|URL> <COMMENT_ID> (-m TEXT | --body-file FILE|-) [--append] [--attach FILE]... [--dry-run]
-lcli upload <ID|URL> <FILE>... [--dry-run]
-```
-
-Issue commands accept `--account NAME` to override team-key routing
-(`accounts` ignores it and always lists every account).
-`<ID|URL>` is an identifier such as `ENG-123` or a `https://linear.app/.../issue/ENG-123/...` URL.
-
-### Reading
-
-`lcli issue` prints markdown (or `--json`) with metadata, description,
-attachments (linked PRs etc.) and every comment, oldest first, each with its
-comment ID. Files uploaded to Linear and referenced in the description or
-comments are downloaded with the account's key to
-`<user cache dir>/lcli/<ID>/` (macOS: `~/Library/Caches/lcli/ENG-123/`) or
-`--out`, and listed under **Media** with their local paths. `--frames N`
-additionally extracts N still frames (at most 20) from each video. A failed
-download or frame extraction does not change the exit code; it is reported as
-an `error:` line under **Media** (`error` in `--json`).
-
-### Writing
-
-- Text comes from `-m` or `--body-file` (`-` reads stdin). Prefer `--body-file`
-  for multi-line markdown to avoid shell quoting problems.
-- Each `--attach` file is uploaded and appended to the comment: images inline
-  (`![name](url)`), other files such as videos as links.
-- `comment edit` replaces the whole body; `--append` adds text/attachments to
-  the end instead. The comment must belong to the given issue.
-- `upload` only prints markdown snippets; the files are not visible on the
-  issue until a snippet is embedded with `comment add`/`comment edit`.
-- `--dry-run` shows exactly what would be posted, without uploading or posting
-  (it still reads the issue from Linear, so it needs the key and network).
-- If posting fails after files were uploaded, their markdown is printed to
-  stderr under "Already uploaded" so they can be reused instead of re-uploaded.
-- `-m` rejects a value that is one of the command's own flags (`-m --dry-run`
-  is almost always a missing message); use `-m=--dry-run` to post it literally.
-- There is intentionally no delete command.
-
-### Exit codes
-
-| Code | Meaning |
-|---|---|
-| 0 | success |
-| 1 | usage or input error (malformed ID, unknown team key, missing file, comment on another issue) |
-| 2 | config, key retrieval or authentication error |
-| 3 | Linear API or network error, including an issue or comment that does not exist |
-
-## Use from Claude Code
-
-`skills/lcli/SKILL.md` teaches an agent how to use the tool. Install it with:
-
 ```sh
-mkdir -p ~/.claude/skills && ln -s "$PWD/skills/lcli" ~/.claude/skills/lcli
+lcli issue ENG-123                                   # issue + comments; downloads uploaded images/videos
+lcli comment add ENG-123 --body-file note.md --attach shot.png
+lcli comment edit ENG-123 <COMMENT_ID> --append -m "Update"
+lcli upload ENG-123 shot.png                          # markdown snippet only
 ```
 
-## Development
-
-See `CLAUDE.md`. The GraphQL client is generated by
-[genqlient](https://github.com/Khan/genqlient) from
-`internal/linear/queries.graphql` against Linear's published schema
-(`internal/linear/schema.graphql`); run `go generate ./...` after changing either.
+Write commands support `--dry-run`. See `lcli --help` for details, and
+`skills/lcli/SKILL.md` for a Claude Code skill.
